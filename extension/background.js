@@ -40,7 +40,10 @@ async function sendHost(message) {
 }
 
 async function inject(tabId) {
-  await browser.scripting.executeScript({target: {tabId}, files: ['content.js']});
+  await browser.scripting.executeScript({
+    target: {tabId, allFrames: true},
+    files: ['content.js'],
+  });
 }
 
 async function handleHostMessage(message) {
@@ -55,7 +58,7 @@ async function handleHostMessage(message) {
   if (message.type === 'action_request') {
     await browser.tabs.sendMessage(tabId, {
       type: 'action_request', sessionId: session.id, action: message.action
-    });
+    }, message.frameId === undefined ? undefined : {frameId: message.frameId});
   }
 }
 
@@ -84,13 +87,15 @@ browser.runtime.onMessage.addListener(async (message, sender) => {
   if (message.type === 'snapshot' && sender.tab) {
     const session = sessions.get(sender.tab.id);
     if (session && session.id === message.sessionId) {
-      await sendHost({...message, tabId: sender.tab.id});
+      await sendHost({...message, tabId: sender.tab.id, frameId: sender.frameId});
     }
   }
 
   if (message.type === 'action_result' && sender.tab) {
     const session = sessions.get(sender.tab.id);
-    if (session && session.id === message.sessionId) await sendHost({...message, tabId: sender.tab.id});
+    if (session && session.id === message.sessionId) {
+      await sendHost({...message, tabId: sender.tab.id, frameId: sender.frameId});
+    }
   }
 });
 

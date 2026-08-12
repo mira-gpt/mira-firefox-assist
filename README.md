@@ -34,6 +34,7 @@ and externally visible actions are separate opt-in capabilities.
 3. Click the extension action on an ordinary web page, describe the request,
    then click **AI Hilfe anfordern**. The host stores the tab-scoped snapshot
    under `pygdo/temp/mira_firefox_assist/` and notifies Mira by path only.
+   Framed pages produce one snapshot per accessible frame.
 
 The snapshot contains the current DOM source (bounded to 250 KiB), visible
 text, form metadata without values, loaded script metadata, inline `on*`
@@ -47,6 +48,8 @@ The local helper can queue either a text input or a local JavaScript file:
 ```bash
 ./bridge/queue-action.py --session SESSION --input '#search' 'example'
 ./bridge/queue-action.py --session SESSION --script ./reviewed-action.js
+# For a captured child frame:
+./bridge/queue-action.py --session SESSION --frame 2 --input '#search' 'example'
 ```
 
 The extension displays the precise request as an overlay in the browser. The

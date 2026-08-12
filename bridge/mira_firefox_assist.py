@@ -49,7 +49,17 @@ def notify_mira(path: Path):
 def save_event(message):
     QUEUE_DIR.mkdir(mode=0o770, parents=True, exist_ok=True)
     session_id = message.get('sessionId', 'unknown')
-    path = QUEUE_DIR / f'{session_id}.json'
+    frame_id = message.get('frameId')
+    suffix = f'.frame-{frame_id}' if message.get('type') == 'snapshot' and isinstance(frame_id, int) else ''
+    path = QUEUE_DIR / f'{session_id}{suffix}.json'
+    if message.get('type') == 'snapshot':
+        try:
+            session_path = QUEUE_DIR / f'{session_id}.json'
+            previous = json.loads(session_path.read_text(encoding='utf-8'))
+            if isinstance(previous.get('request'), str) and 'request' not in message:
+                message['request'] = previous['request']
+        except (OSError, json.JSONDecodeError):
+            pass
     path.write_text(json.dumps(message, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
     os.chmod(path, 0o660)
     notify_mira(path)
