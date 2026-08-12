@@ -120,3 +120,20 @@ browser.webNavigation.onCommitted.addListener(async (details) => {
     console.debug('Could not refresh assisted frame:', error);
   }
 });
+
+// The navigation event is early on some old framed pages. A completed-tab
+// fallback makes sure an explicitly assisted same-origin page is captured
+// again after its document and child frames have settled.
+browser.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
+  if (changeInfo.status !== 'complete') return;
+  const session = sessions.get(tabId);
+  if (!session) return;
+  try {
+    await inject(tabId);
+    await browser.tabs.sendMessage(tabId, {
+      type: 'snapshot', sessionId: session.id,
+    });
+  } catch (error) {
+    console.debug('Could not refresh assisted tab:', error);
+  }
+});
