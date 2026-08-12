@@ -10,9 +10,11 @@
   <main>
     <h1>Mira Firefox Assist</h1>
     <p id="status">This tab is not shared.</p>
+    <label for="request">What should Mira do?</label>
+    <textarea id="request" rows="3" placeholder="For example: Explain this page."></textarea>
     <button id="start" type="button">AI Hilfe anfordern</button>
     <button id="stop" type="button" class="danger" disabled>Stop assistance</button>
-    <p class="note">Only this tab is shared. Password fields are never included.</p>
+    <p class="note">Only this tab is shared. Password fields and typed values are never included. Every input or script action asks visibly before it runs.</p>
   </main>
   <script type="module" src="popup.js"></script>
 </body>

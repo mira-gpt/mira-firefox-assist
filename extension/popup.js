@@ -1,4 +1,5 @@
 const status = document.querySelector('#status');
+const request = document.querySelector('#request');
 const start = document.querySelector('#start');
 const stop = document.querySelector('#stop');
 
@@ -17,7 +18,7 @@ async function refresh() {
 
 start.addEventListener('click', async () => {
   const tab = await activeTab();
-  await browser.runtime.sendMessage({type: 'start', tabId: tab.id});
+  await browser.runtime.sendMessage({type: 'start', tabId: tab.id, request: request.value.trim()});
   await refresh();
 });
 

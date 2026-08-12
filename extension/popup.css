@@ -4,5 +4,6 @@ main { padding: 16px; }
 h1 { margin: 0 0 10px; font-size: 18px; }
 p { line-height: 1.4; }
 button { box-sizing: border-box; margin: 4px 0; padding: 9px; width: 100%; font-weight: 700; }
+textarea { box-sizing: border-box; margin: 5px 0 8px; padding: 7px; resize: vertical; width: 100%; }
 .danger { color: #a40000; }
 .note { color: #666; font-size: 12px; }

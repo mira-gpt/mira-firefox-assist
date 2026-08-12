@@ -23,12 +23,19 @@ async function inject(tabId) {
 }
 
 async function handleHostMessage(message) {
-  const session = sessions.get(message.tabId);
+  const found = message.tabId === undefined
+    ? [...sessions.entries()].find(([, session]) => session.id === message.sessionId)
+    : [message.tabId, sessions.get(message.tabId)];
+  const [tabId, session] = found || [];
   if (!session || session.id !== message.sessionId) return;
   if (message.type === 'snapshot') {
-    await browser.tabs.sendMessage(message.tabId, {type: 'snapshot', sessionId: session.id});
+    await browser.tabs.sendMessage(tabId, {type: 'snapshot', sessionId: session.id});
   }
-  // Mutating actions deliberately remain unimplemented in milestone 1.
+  if (message.type === 'action_request') {
+    await browser.tabs.sendMessage(tabId, {
+      type: 'action_request', sessionId: session.id, action: message.action
+    });
+  }
 }
 
 browser.runtime.onMessage.addListener(async (message, sender) => {
@@ -38,7 +45,7 @@ browser.runtime.onMessage.addListener(async (message, sender) => {
     await inject(message.tabId);
     const id = crypto.randomUUID();
     sessions.set(message.tabId, {id});
-    sendHost({type: 'session_started', sessionId: id, tabId: message.tabId});
+    sendHost({type: 'session_started', sessionId: id, tabId: message.tabId, request: message.request || ''});
     await browser.tabs.sendMessage(message.tabId, {type: 'snapshot', sessionId: id});
     return {active: true};
   }
@@ -55,6 +62,11 @@ browser.runtime.onMessage.addListener(async (message, sender) => {
     if (session && session.id === message.sessionId) {
       sendHost({...message, tabId: sender.tab.id});
     }
+  }
+
+  if (message.type === 'action_result' && sender.tab) {
+    const session = sessions.get(sender.tab.id);
+    if (session && session.id === message.sessionId) sendHost({...message, tabId: sender.tab.id});
   }
 });
 
