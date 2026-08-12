@@ -81,7 +81,9 @@ def main():
         if message is None:
             return
         event = message.get('type')
-        if event in {'session_started', 'session_stopped', 'snapshot', 'action_result'}:
+        if event == 'probe':
+            write_message({'type': 'ack', 'event': event})
+        elif event in {'session_started', 'session_stopped', 'snapshot', 'action_result'}:
             save_event(message)
             write_message({'type': 'ack', 'event': event, 'sessionId': message.get('sessionId')})
         else:

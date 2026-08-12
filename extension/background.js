@@ -1,21 +1,42 @@
 const HOST = 'org.mira.firefox_assist';
 const sessions = new Map();
 let host = null;
+let hostState = 'disconnected';
+let hostError = '';
+let hostReady = null;
+let resolveHostReady = null;
+let rejectHostReady = null;
 
 function connectHost() {
   if (host) return host;
   host = browser.runtime.connectNative(HOST);
-  host.onMessage.addListener(handleHostMessage);
-  host.onDisconnect.addListener(() => { host = null; });
+  hostState = 'connecting';
+  hostError = '';
+  hostReady = new Promise((resolve, reject) => {
+    resolveHostReady = resolve;
+    rejectHostReady = reject;
+  });
+  host.onMessage.addListener(async (message) => {
+    if (message.type === 'host_ready') {
+      hostState = 'connected';
+      resolveHostReady?.();
+      return;
+    }
+    await handleHostMessage(message);
+  });
+  host.onDisconnect.addListener(() => {
+    hostError = browser.runtime.lastError?.message || 'Native host disconnected.';
+    hostState = 'disconnected';
+    rejectHostReady?.(new Error(hostError));
+    host = null;
+  });
   return host;
 }
 
-function sendHost(message) {
-  try {
-    connectHost().postMessage(message);
-  } catch (error) {
-    console.error('Mira native host unavailable:', error);
-  }
+async function sendHost(message) {
+  connectHost();
+  await hostReady;
+  host.postMessage(message);
 }
 
 async function inject(tabId) {
@@ -39,20 +60,23 @@ async function handleHostMessage(message) {
 }
 
 browser.runtime.onMessage.addListener(async (message, sender) => {
-  if (message.type === 'status') return {active: sessions.has(message.tabId)};
+  if (message.type === 'status') {
+    return {active: sessions.has(message.tabId), hostState, hostError};
+  }
 
   if (message.type === 'start') {
+    await sendHost({type: 'probe'});
     await inject(message.tabId);
     const id = crypto.randomUUID();
     sessions.set(message.tabId, {id});
-    sendHost({type: 'session_started', sessionId: id, tabId: message.tabId, request: message.request || ''});
+    await sendHost({type: 'session_started', sessionId: id, tabId: message.tabId, request: message.request || ''});
     await browser.tabs.sendMessage(message.tabId, {type: 'snapshot', sessionId: id});
     return {active: true};
   }
 
   if (message.type === 'stop') {
     const session = sessions.get(message.tabId);
-    if (session) sendHost({type: 'session_stopped', sessionId: session.id, tabId: message.tabId});
+    if (session) await sendHost({type: 'session_stopped', sessionId: session.id, tabId: message.tabId});
     sessions.delete(message.tabId);
     return {active: false};
   }
@@ -60,13 +84,13 @@ browser.runtime.onMessage.addListener(async (message, sender) => {
   if (message.type === 'snapshot' && sender.tab) {
     const session = sessions.get(sender.tab.id);
     if (session && session.id === message.sessionId) {
-      sendHost({...message, tabId: sender.tab.id});
+      await sendHost({...message, tabId: sender.tab.id});
     }
   }
 
   if (message.type === 'action_result' && sender.tab) {
     const session = sessions.get(sender.tab.id);
-    if (session && session.id === message.sessionId) sendHost({...message, tabId: sender.tab.id});
+    if (session && session.id === message.sessionId) await sendHost({...message, tabId: sender.tab.id});
   }
 });
 
