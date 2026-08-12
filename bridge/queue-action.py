@@ -16,11 +16,17 @@ def main():
     parser.add_argument('--frame', type=int, help='Optional frame ID from a captured snapshot.')
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('--input', nargs=2, metavar=('SELECTOR', 'TEXT'))
+    group.add_argument('--navigate', metavar='URL', help='Navigate within the current origin after visible approval.')
+    group.add_argument('--click', metavar='SELECTOR', help='Click one visible page element after approval.')
     group.add_argument('--script', metavar='FILE', help='Local JavaScript file to execute after visible approval.')
     args = parser.parse_args()
 
     if args.input:
         action = {'kind': 'input', 'selector': args.input[0], 'text': args.input[1]}
+    elif args.navigate:
+        action = {'kind': 'navigate', 'url': args.navigate}
+    elif args.click:
+        action = {'kind': 'click', 'selector': args.click}
     else:
         source = Path(args.script).read_text(encoding='utf-8')
         action = {'kind': 'script', 'source': source}

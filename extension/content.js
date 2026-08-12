@@ -73,6 +73,19 @@ async function perform(action) {
     await new Promise((resolve) => setTimeout(resolve, 1000));
     return {ok: true, kind: 'input'};
   }
+  if (action.kind === 'navigate') {
+    const url = new URL(String(action.url || ''), location.href);
+    if (url.origin !== location.origin) return {ok: false, reason: 'cross_origin_navigation_blocked'};
+    location.assign(url.href);
+    return {ok: true, kind: 'navigate', url: url.href};
+  }
+  if (action.kind === 'click') {
+    const element = document.querySelector(action.selector);
+    if (!element) return {ok: false, reason: 'element_unavailable'};
+    element.click();
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    return {ok: true, kind: 'click'};
+  }
   if (action.kind === 'script') {
     // Runs only after an in-page visible approval. This is a page-DOM helper,
     // not a bypass for browser or site permissions.

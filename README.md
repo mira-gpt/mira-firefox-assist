@@ -43,10 +43,13 @@ fields or typed field values.
 
 ## Explicit actions
 
-The local helper can queue either a text input or a local JavaScript file:
+The local helper can queue text input, same-origin navigation, a click, or a
+local JavaScript file:
 
 ```bash
 ./bridge/queue-action.py --session SESSION --input '#search' 'example'
+./bridge/queue-action.py --session SESSION --navigate '/private_messages/privatemessages.php'
+./bridge/queue-action.py --session SESSION --click 'button[type=submit]'
 ./bridge/queue-action.py --session SESSION --script ./reviewed-action.js
 # For a captured child frame:
 ./bridge/queue-action.py --session SESSION --frame 2 --input '#search' 'example'
