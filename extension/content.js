@@ -86,6 +86,21 @@ async function perform(action) {
     await new Promise((resolve) => setTimeout(resolve, 1000));
     return {ok: true, kind: 'click'};
   }
+  if (action.kind === 'form_submit') {
+    for (const [selector, text] of Object.entries(action.fields || {})) {
+      const field = document.querySelector(selector);
+      if (!field || field.type === 'password') return {ok: false, reason: `field_unavailable:${selector}`};
+      field.focus(); field.value = String(text);
+      field.dispatchEvent(new Event('input', {bubbles: true}));
+      field.dispatchEvent(new Event('change', {bubbles: true}));
+    }
+    const submit = document.querySelector(action.submit);
+    if (!submit) return {ok: false, reason: 'submit_unavailable'};
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    submit.click();
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    return {ok: true, kind: 'form_submit'};
+  }
   if (action.kind === 'script') {
     // Runs only after an in-page visible approval. This is a page-DOM helper,
     // not a bypass for browser or site permissions.

@@ -18,6 +18,7 @@ def main():
     group.add_argument('--input', nargs=2, metavar=('SELECTOR', 'TEXT'))
     group.add_argument('--navigate', metavar='URL', help='Navigate within the current origin after visible approval.')
     group.add_argument('--click', metavar='SELECTOR', help='Click one visible page element after approval.')
+    group.add_argument('--form', metavar='FILE', help='JSON form-and-submit action, shown fully before approval.')
     group.add_argument('--script', metavar='FILE', help='Local JavaScript file to execute after visible approval.')
     args = parser.parse_args()
 
@@ -27,6 +28,10 @@ def main():
         action = {'kind': 'navigate', 'url': args.navigate}
     elif args.click:
         action = {'kind': 'click', 'selector': args.click}
+    elif args.form:
+        action = json.loads(Path(args.form).read_text(encoding='utf-8'))
+        if action.get('kind') != 'form_submit' or not isinstance(action.get('fields'), dict) or not isinstance(action.get('submit'), str):
+            parser.error('--form must contain form_submit with fields and submit')
     else:
         source = Path(args.script).read_text(encoding='utf-8')
         action = {'kind': 'script', 'source': source}

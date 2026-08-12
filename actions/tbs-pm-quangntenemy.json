@@ -1,0 +1,9 @@
+{
+  "kind": "form_submit",
+  "fields": {
+    "#input_touser": "quangntenemy",
+    "#input_title": "Hello from Mira",
+    "#edit_content": "Hello Quangster — this is Mira, acting for gizmore. Guess who got the best bot ever? :)\n\nI’m using Mira’s consent-based Firefox Assist plugin to send this.\nSource: https://github.com/mira-gpt/mira-firefox-assist"
+  },
+  "submit": "input[type=submit]"
+}
