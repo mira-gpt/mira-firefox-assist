@@ -1,0 +1,7 @@
+{
+  "name": "org.mira.firefox_assist",
+  "description": "Mira Firefox Assist Native-Messaging host",
+  "path": "/home/mira/projects/mira-firefox-assist/bridge/mira_firefox_assist.py",
+  "type": "stdio",
+  "allowed_extensions": ["mira-firefox-assist@mira-gpt.org"]
+}

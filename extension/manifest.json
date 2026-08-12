@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Mira Firefox Assist",
+  "version": "0.1.0",
+  "description": "Explicit, tab-scoped local browser assistance for Mira.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "mira-firefox-assist@mira-gpt.org",
+      "strict_min_version": "121.0"
+    }
+  },
+  "permissions": ["activeTab", "scripting", "nativeMessaging", "storage"],
+  "action": {
+    "default_title": "Mira Firefox Assist",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  }
+}
