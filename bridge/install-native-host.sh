@@ -3,6 +3,12 @@ set -euo pipefail
 
 repo_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 target_dir="$HOME/.mozilla/native-messaging-hosts"
+
+if [[ ${EUID} -eq 0 ]]; then
+    printf 'Run this installer as the desktop Firefox user, not as root.\n' >&2
+    exit 1
+fi
+
 mkdir -p "$target_dir"
 
 python3 - "$repo_dir" "$target_dir/org.mira.firefox_assist.json" <<'PY'
