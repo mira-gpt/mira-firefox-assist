@@ -9,7 +9,7 @@
       "strict_min_version": "121.0"
     }
   },
-  "permissions": ["activeTab", "scripting", "nativeMessaging", "storage"],
+  "permissions": ["activeTab", "scripting", "nativeMessaging", "storage", "webNavigation"],
   "action": {
     "default_title": "Mira Firefox Assist",
     "default_popup": "popup.html"

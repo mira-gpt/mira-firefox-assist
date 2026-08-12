@@ -46,6 +46,13 @@ async function inject(tabId) {
   });
 }
 
+async function injectFrame(tabId, frameId) {
+  await browser.scripting.executeScript({
+    target: {tabId, frameIds: [frameId]},
+    files: ['content.js'],
+  });
+}
+
 async function handleHostMessage(message) {
   const found = message.tabId === undefined
     ? [...sessions.entries()].find(([, session]) => session.id === message.sessionId)
@@ -100,3 +107,16 @@ browser.runtime.onMessage.addListener(async (message, sender) => {
 });
 
 browser.tabs.onRemoved.addListener((tabId) => sessions.delete(tabId));
+
+browser.webNavigation.onCommitted.addListener(async (details) => {
+  const session = sessions.get(details.tabId);
+  if (!session) return;
+  try {
+    await injectFrame(details.tabId, details.frameId);
+    await browser.tabs.sendMessage(details.tabId, {
+      type: 'snapshot', sessionId: session.id,
+    }, {frameId: details.frameId});
+  } catch (error) {
+    console.debug('Could not refresh assisted frame:', error);
+  }
+});

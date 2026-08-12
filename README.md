@@ -55,7 +55,10 @@ The local helper can queue either a text input or a local JavaScript file:
 The extension displays the precise request as an overlay in the browser. The
 person at the browser must choose **Allow once**; otherwise nothing runs. An
 approved input/script action waits at least one second before reporting its
-result. Submit/click/navigation primitives are deliberately not available yet.
+result. A reviewed script can perform a navigation, but it is still shown in
+full and must be allowed once. Assisted tabs are refreshed after an accessible
+frame navigation so Mira can inspect the next visible form before proposing a
+later, separately approved action.
 
 Native Messaging restricts the native host to this extension ID. The extension
 uses `activeTab` plus `scripting`, so it receives access only after the user
