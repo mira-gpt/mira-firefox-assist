@@ -2,8 +2,15 @@
 body { margin: 0; min-width: 280px; }
 main { padding: 16px; }
 h1 { margin: 0 0 10px; font-size: 18px; }
+h2 { margin: 18px 0 8px; font-size: 15px; }
 p { line-height: 1.4; }
 button { box-sizing: border-box; margin: 4px 0; padding: 9px; width: 100%; font-weight: 700; }
 textarea { box-sizing: border-box; margin: 5px 0 8px; padding: 7px; resize: vertical; width: 100%; }
 .danger { color: #a40000; }
 .note { color: #666; font-size: 12px; }
+#messages { border: 1px solid #777; border-radius: 6px; max-height: 180px; overflow: auto; padding: 7px; }
+.message { margin: 0 0 7px; white-space: pre-wrap; }
+.message:last-child { margin-bottom: 0; }
+.message.assistant { color: #396; }
+.message.user { color: #357; }
+.message.status { color: #875; font-size: 12px; }

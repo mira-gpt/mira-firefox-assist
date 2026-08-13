@@ -19,6 +19,8 @@ def main():
     group.add_argument('--navigate', metavar='URL', help='Navigate within the current origin after visible approval.')
     group.add_argument('--click', metavar='SELECTOR', help='Click one visible page element after approval.')
     group.add_argument('--form', metavar='FILE', help='JSON form-and-submit action, shown fully before approval.')
+    group.add_argument('--chat-send', nargs=2, metavar=('SELECTOR', 'TEXT'),
+                       help='Set a visible contenteditable composer and submit it after approval.')
     group.add_argument('--script', metavar='FILE', help='Local JavaScript file to execute after visible approval.')
     args = parser.parse_args()
 
@@ -32,6 +34,8 @@ def main():
         action = json.loads(Path(args.form).read_text(encoding='utf-8'))
         if action.get('kind') != 'form_submit' or not isinstance(action.get('fields'), dict) or not isinstance(action.get('submit'), str):
             parser.error('--form must contain form_submit with fields and submit')
+    elif args.chat_send:
+        action = {'kind': 'chat_send', 'selector': args.chat_send[0], 'text': args.chat_send[1]}
     else:
         source = Path(args.script).read_text(encoding='utf-8')
         action = {'kind': 'script', 'source': source}

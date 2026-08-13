@@ -7,6 +7,17 @@ let hostReady = null;
 let resolveHostReady = null;
 let rejectHostReady = null;
 
+function appendMessage(session, role, text) {
+  if (!session || !text) return;
+  session.messages ??= [];
+  session.messages.push({role, text: String(text).slice(0, 4000), time: new Date().toISOString()});
+  if (session.messages.length > 100) session.messages.shift();
+}
+
+function notifyPopup(tabId) {
+  browser.runtime.sendMessage({type: 'assist_feedback', tabId}).catch(() => {});
+}
+
 function connectHost() {
   if (host) return host;
   host = browser.runtime.connectNative(HOST);
@@ -63,22 +74,47 @@ async function handleHostMessage(message) {
     await browser.tabs.sendMessage(tabId, {type: 'snapshot', sessionId: session.id});
   }
   if (message.type === 'action_request') {
-    await browser.tabs.sendMessage(tabId, {
-      type: 'action_request', sessionId: session.id, action: message.action
-    }, message.frameId === undefined ? undefined : {frameId: message.frameId});
+    try {
+      await browser.tabs.sendMessage(tabId, {
+        type: 'action_request', sessionId: session.id, action: message.action
+      }, message.frameId === undefined ? undefined : {frameId: message.frameId});
+    } catch (error) {
+      // A rejected frame delivery must not silently consume a reviewed action.
+      // Report it through the normal result path so Mira can distinguish it
+      // from a user denial or a page-side failure.
+      await sendHost({
+        type: 'action_result', sessionId: session.id, tabId, frameId: message.frameId,
+        result: {ok: false, reason: `action_delivery_failed:${String(error)}`},
+      });
+    }
+  }
+  if (message.type === 'assist_feedback') {
+    appendMessage(session, 'assistant', message.text);
+    if (message.state) session.assistantState = message.state;
+    notifyPopup(tabId);
   }
 }
 
 browser.runtime.onMessage.addListener(async (message, sender) => {
   if (message.type === 'status') {
-    return {active: sessions.has(message.tabId), hostState, hostError};
+    const session = sessions.get(message.tabId);
+    return {
+      active: Boolean(session), hostState, hostError,
+      messages: session?.messages || [], assistantState: session?.assistantState || '',
+    };
   }
 
   if (message.type === 'start') {
     await sendHost({type: 'probe'});
     await inject(message.tabId);
+    const previous = sessions.get(message.tabId);
+    if (previous) {
+      await sendHost({type: 'session_stopped', sessionId: previous.id, tabId: message.tabId});
+    }
     const id = crypto.randomUUID();
-    sessions.set(message.tabId, {id});
+    const session = {id, messages: []};
+    appendMessage(session, 'user', message.request || 'Please inspect this tab.');
+    sessions.set(message.tabId, session);
     await sendHost({type: 'session_started', sessionId: id, tabId: message.tabId, request: message.request || ''});
     await browser.tabs.sendMessage(message.tabId, {type: 'snapshot', sessionId: id});
     return {active: true};
@@ -89,6 +125,15 @@ browser.runtime.onMessage.addListener(async (message, sender) => {
     if (session) await sendHost({type: 'session_stopped', sessionId: session.id, tabId: message.tabId});
     sessions.delete(message.tabId);
     return {active: false};
+  }
+
+  if (message.type === 'user_note') {
+    const session = sessions.get(message.tabId);
+    if (!session) throw new Error('This tab is not currently shared.');
+    appendMessage(session, 'user', message.text);
+    await sendHost({type: 'user_note', sessionId: session.id, tabId: message.tabId, text: String(message.text).slice(0, 4000)});
+    notifyPopup(message.tabId);
+    return {active: true};
   }
 
   if (message.type === 'snapshot' && sender.tab) {

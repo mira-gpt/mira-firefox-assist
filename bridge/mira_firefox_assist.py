@@ -7,11 +7,13 @@ import select
 import struct
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 MAX_MESSAGE_BYTES = 1_000_000
 QUEUE_DIR = Path('/home/gizmore/www/pygdo/temp/mira_firefox_assist')
 ACTIONS_DIR = QUEUE_DIR / 'actions'
+FEEDBACK_DIR = QUEUE_DIR / 'feedback'
 
 
 def read_message():
@@ -37,11 +39,16 @@ def write_message(message):
 
 
 def notify_mira(path: Path):
-    """Only send a local file path to Mira's terminal, never untrusted page text."""
+    """Only send a local job path to Mira's terminal, never untrusted page text."""
     try:
-        subprocess.run(['tmux', 'send-keys', '-t', 'mira-codex:0.0', '-l', '--', f'$firefox_assist {path}  '], check=True)
-        subprocess.run(['tmux', 'send-keys', '-t', 'mira-codex:0.0', 'Enter'], check=True)
-        subprocess.run(['tmux', 'send-keys', '-t', 'mira-codex:0.0', 'Enter'], check=True)
+        subprocess.run(['tmux', 'send-keys', '-t', 'mira-codex:0.0', '-l', '--', f'$assist {path}  '], check=True)
+        # Codex's multiline composer may consume an initial pair as editing
+        # input. Send a second pair after one short UI tick to submit reliably.
+        for _ in range(2):
+            subprocess.run(['tmux', 'send-keys', '-t', 'mira-codex:0.0', 'C-m'], check=True)
+        time.sleep(0.042)
+        for _ in range(2):
+            subprocess.run(['tmux', 'send-keys', '-t', 'mira-codex:0.0', 'C-m'], check=True)
     except (OSError, subprocess.CalledProcessError) as error:
         print(f'Could not notify Mira: {error}', file=sys.stderr)
 
@@ -52,17 +59,19 @@ def save_event(message):
     frame_id = message.get('frameId')
     suffix = f'.frame-{frame_id}' if message.get('type') == 'snapshot' and isinstance(frame_id, int) else ''
     path = QUEUE_DIR / f'{session_id}{suffix}.json'
-    if message.get('type') == 'snapshot':
+    if message.get('type') != 'session_started':
         try:
             session_path = QUEUE_DIR / f'{session_id}.json'
             previous = json.loads(session_path.read_text(encoding='utf-8'))
-            if isinstance(previous.get('request'), str) and 'request' not in message:
-                message['request'] = previous['request']
+            for key in ('request', 'notes', 'last_user_note_at'):
+                if key in previous and key not in message:
+                    message[key] = previous[key]
         except (OSError, json.JSONDecodeError):
             pass
     path.write_text(json.dumps(message, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
     os.chmod(path, 0o660)
-    notify_mira(path)
+    # A periodic dispatcher decides whether this is a newly open or a stalled
+    # job.  Do not wake Mira for every snapshot/action event.
 
 
 def send_pending_actions():
@@ -80,12 +89,53 @@ def send_pending_actions():
             path.unlink(missing_ok=True)
 
 
+def send_pending_feedback():
+    """Deliver short Mira status messages to the explicitly assisted tab."""
+    FEEDBACK_DIR.mkdir(mode=0o770, parents=True, exist_ok=True)
+    for path in sorted(FEEDBACK_DIR.glob('*.json')):
+        try:
+            feedback = json.loads(path.read_text(encoding='utf-8'))
+            if not isinstance(feedback.get('sessionId'), str) or not isinstance(feedback.get('text'), str):
+                raise ValueError('Expected sessionId and text')
+            write_message({
+                'type': 'assist_feedback',
+                'sessionId': feedback['sessionId'],
+                'text': feedback['text'][:4000],
+                'state': feedback.get('state', ''),
+            })
+            path.unlink()
+        except (OSError, ValueError, json.JSONDecodeError) as error:
+            print(f'Ignoring malformed feedback {path}: {error}', file=sys.stderr)
+            path.unlink(missing_ok=True)
+
+
+def save_user_note(message):
+    """Append a browser user's note without replacing the active session record."""
+    session_id = message.get('sessionId', 'unknown')
+    path = QUEUE_DIR / f'{session_id}.json'
+    data = {}
+    try:
+        data = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError):
+        pass
+    notes = data.setdefault('notes', [])
+    notes.append({
+        'role': 'user', 'text': str(message.get('text', ''))[:4000],
+        'time': int(time.time()),
+    })
+    data['last_user_note_at'] = int(time.time())
+    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+    os.chmod(path, 0o660)
+    notify_mira(path)
+
+
 def main():
     write_message({'type': 'host_ready', 'mode': 'inspect_and_confirm_actions'})
     while True:
         readable, _, _ = select.select([sys.stdin.buffer], [], [], 0.5)
         if not readable:
             send_pending_actions()
+            send_pending_feedback()
             continue
         message = read_message()
         if message is None:
@@ -95,6 +145,9 @@ def main():
             write_message({'type': 'ack', 'event': event})
         elif event in {'session_started', 'session_stopped', 'snapshot', 'action_result'}:
             save_event(message)
+            write_message({'type': 'ack', 'event': event, 'sessionId': message.get('sessionId')})
+        elif event == 'user_note':
+            save_user_note(message)
             write_message({'type': 'ack', 'event': event, 'sessionId': message.get('sessionId')})
         else:
             write_message({'type': 'error', 'error': 'unsupported_message'})

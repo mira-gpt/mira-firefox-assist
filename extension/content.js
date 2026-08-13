@@ -1,6 +1,8 @@
 const MAX_SOURCE_BYTES = 250_000;
 const MAX_EVENT_LOG = 100;
 const eventLog = [];
+let activeSessionId = null;
+let snapshotTimer = null;
 
 function trim(value, limit) {
   return String(value || '').slice(0, limit);
@@ -26,7 +28,7 @@ for (const type of ['click', 'change', 'input', 'submit', 'keydown']) {
   document.addEventListener(type, rememberEvent, true);
 }
 
-function snapshot() {
+function snapshot(includeSource = true) {
   const fields = [...document.querySelectorAll('input, textarea, select')]
     .filter((field) => field.type !== 'password').slice(0, 100)
     .map((field) => ({...elementInfo(field), label: trim(field.labels?.[0]?.innerText, 200)}));
@@ -41,11 +43,25 @@ function snapshot() {
   return {
     title: document.title, url: location.href,
     selection: trim(getSelection(), 2000), text: trim(document.body?.innerText, 8000),
-    source: trim(document.documentElement?.outerHTML, MAX_SOURCE_BYTES),
-    sourceTruncated: (document.documentElement?.outerHTML.length || 0) > MAX_SOURCE_BYTES,
+    source: includeSource ? trim(document.documentElement?.outerHTML, MAX_SOURCE_BYTES) : '',
+    sourceTruncated: includeSource && (document.documentElement?.outerHTML.length || 0) > MAX_SOURCE_BYTES,
     fields, scripts, inlineHandlers, observedEvents: eventLog
   };
 }
+
+function queueLiveSnapshot() {
+  if (!activeSessionId || snapshotTimer) return;
+  snapshotTimer = setTimeout(() => {
+    snapshotTimer = null;
+    // Chat pages stream many small DOM updates. Send a compact state refresh
+    // after they settle, without copying the page source on every token.
+    browser.runtime.sendMessage({type: 'snapshot', sessionId: activeSessionId, snapshot: snapshot(false)});
+  }, 1500);
+}
+
+new MutationObserver(queueLiveSnapshot).observe(document.documentElement, {
+  childList: true, subtree: true, characterData: true,
+});
 
 function confirmAction(action) {
   return new Promise((resolve) => {
@@ -101,6 +117,32 @@ async function perform(action) {
     await new Promise((resolve) => setTimeout(resolve, 1000));
     return {ok: true, kind: 'form_submit'};
   }
+  if (action.kind === 'chat_send') {
+    const composer = document.querySelector(action.selector);
+    if (!composer || composer.type === 'password') {
+      return {ok: false, reason: 'composer_unavailable'};
+    }
+    composer.focus();
+    if (composer.tagName === 'TEXTAREA' || composer.tagName === 'INPUT') {
+      composer.value = String(action.text || '');
+    } else if (composer.getAttribute('contenteditable') === 'true') {
+      document.execCommand('selectAll', false);
+      document.execCommand('insertText', false, String(action.text || ''));
+    } else {
+      return {ok: false, reason: 'composer_unavailable'};
+    }
+    composer.dispatchEvent(new InputEvent('input', {
+      bubbles: true,
+      inputType: 'insertText',
+      data: String(action.text || ''),
+    }));
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const submit = document.querySelector('button[aria-label*="Send" i], button[data-testid="send-button"], form button[type="submit"]');
+    if (!submit || submit.disabled) return {ok: false, reason: 'send_button_unavailable'};
+    submit.click();
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    return {ok: true, kind: 'chat_send'};
+  }
   if (action.kind === 'script') {
     // Runs only after an in-page visible approval. This is a page-DOM helper,
     // not a bypass for browser or site permissions.
@@ -113,9 +155,11 @@ async function perform(action) {
 
 browser.runtime.onMessage.addListener(async (message) => {
   if (message.type === 'snapshot') {
+    activeSessionId = message.sessionId;
     browser.runtime.sendMessage({type: 'snapshot', sessionId: message.sessionId, snapshot: snapshot()});
   }
   if (message.type === 'action_request') {
+    activeSessionId = message.sessionId;
     try {
       const result = await perform(message.action);
       browser.runtime.sendMessage({type: 'action_result', sessionId: message.sessionId, result});

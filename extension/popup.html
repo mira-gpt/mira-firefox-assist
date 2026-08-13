@@ -14,6 +14,13 @@
     <textarea id="request" rows="3" placeholder="For example: Explain this page."></textarea>
     <button id="start" type="button">AI Hilfe anfordern</button>
     <button id="stop" type="button" class="danger" disabled>Stop assistance</button>
+    <section id="dialogue" hidden>
+      <h2>Assist dialogue</h2>
+      <div id="messages" aria-live="polite"></div>
+      <label for="note">Message for Mira</label>
+      <textarea id="note" rows="2" placeholder="For example: Please only analyse the error."></textarea>
+      <button id="send-note" type="button">Send message</button>
+    </section>
     <p class="note">Only this tab is shared. Password fields and typed values are never included. Every input or script action asks visibly before it runs.</p>
   </main>
   <script type="module" src="popup.js"></script>
