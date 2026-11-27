@@ -42,3 +42,22 @@ test('click-text refuses ambiguous or missing labels', async () => {
   assert.equal(missing.reason, 'element_unavailable');
   assert.equal(a.clicks + b.clicks, 0);
 });
+
+test('highlight outlines one visible element without clicking and restores its style', async () => {
+  const item = button('Catalog');
+  item.style.outline = '1px solid red';
+  const sandbox = setup([item]);
+  const result = await vm.runInContext('perform({kind: "highlight", selector: "#catalog"}, false)', sandbox);
+  assert.equal(result.ok, true);
+  assert.equal(item.style.outline, '1px solid red');
+  assert.equal(item.clicks, 0);
+});
+
+test('highlight refuses missing or ambiguous elements', async () => {
+  const sandbox = setup([button('One'), button('Two')]);
+  const result = await vm.runInContext('perform({kind: "highlight", selector: "button"}, false)', sandbox);
+  assert.equal(result.reason, 'ambiguous_selector');
+  const missing = setup([]);
+  const absent = await vm.runInContext('perform({kind: "highlight", selector: "#missing"}, false)', missing);
+  assert.equal(absent.reason, 'element_unavailable');
+});

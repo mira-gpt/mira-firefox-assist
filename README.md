@@ -5,7 +5,7 @@ An opt-in Firefox assistance bridge for Mira.
 ## Safety model
 
 - Assistance is enabled explicitly for one active tab.
-- A visible stop control ends the session immediately.
+- The extension popup's stop control ends the session.
 - The browser extension talks only to a local bridge.
 - External actions remain visible and require the user-selected scope.
 - No credentials, browser profiles, or private files belong in this repository.
@@ -37,7 +37,7 @@ and externally visible actions are separate opt-in capabilities.
    sends one `$foxy --session ID` when an Assist request starts or when the
    user chooses Continue. It waits for an idle Codex prompt and does not send
    page content or Ctrl-C. Snapshots do not generate wake-up events. Invoke
-   `$foxy` or `$assist PATH` manually if the handoff is unavailable.
+   `$foxy --session ID` manually if the handoff is unavailable.
    Framed pages produce one snapshot per accessible frame.
 
 To open a separate window, enter an HTTP(S) URL in the extension popup and
@@ -88,6 +88,7 @@ local JavaScript file:
 ./bridge/queue-action.py --session SESSION --navigate '/private_messages/privatemessages.php'
 ./bridge/queue-action.py --session SESSION --click 'button[type=submit]'
 ./bridge/queue-action.py --session SESSION --click-text 'Catalog'
+./bridge/queue-action.py --session SESSION --highlight '#search'
 ./bridge/queue-action.py --session SESSION --refresh
 ./bridge/queue-action.py --session SESSION --form ./actions/tbs-pm-quangntenemy.json
 ./bridge/queue-action.py --session SESSION --script ./reviewed-action.js
@@ -95,6 +96,8 @@ local JavaScript file:
 ./bridge/queue-action.py --session SESSION --frame 2 --input '#search' 'example'
 ```
 
+`--highlight` briefly outlines one uniquely matching visible element without
+clicking or asking for action approval. Pause or revoke still blocks it.
 `--click-text` only clicks a unique visible link or button whose label matches
 exactly; ambiguous matches are reported instead of guessed. `--refresh` asks
 for a fresh read-only snapshot in the current frame. Like other actions these
@@ -103,14 +106,13 @@ require a live shared session; action approval follows the session mode.
 Normally the extension displays the precise request as an overlay and the
 person at the browser chooses **Allow once**. Optionally select **YOLO**
 and acknowledge its risks when starting a session to run structured actions without individual prompts;
-the on-page **Mira YOLO — Revoke access** button or the popup's **Revoke access**
-button ends that tab session. Script actions still require approval. YOLO has
+the popup's **Revoke access** button ends that tab session. Script actions still require approval. YOLO has
 no time limit while the tab and extension remain open; the bridge attempts to
 reconnect after a host disconnect. Closing the tab, restarting Firefox, or
 reloading the extension ends the session: a new explicit grant is then needed.
 Stop prevents new actions, though an already executing browser action cannot
 always be undone. Page snapshots may contain sensitive content and should be
-treated accordingly. **Human controls now** pauses assistant actions without
+treated accordingly. The popup's **Human controls now** pauses assistant actions without
 revoking access; **Mira, continue please** resumes. Actions received while
 paused are rejected rather than replayed. An in-progress action may already
 have changed the page before the pause takes effect. An
@@ -124,7 +126,7 @@ later, separately approved action.
 
 The popup shows a small, tab-scoped dialogue while a session is active. The
 person at the browser can save a short clarification in the session job; invoke
-`$assist PATH` or `$foxy` to ask Mira to inspect it. Mira can return a visible
+`$foxy --session ID` to ask Mira to inspect it. Mira can return a visible
 status, result or pause reason without taking a browser action:
 
 ```bash

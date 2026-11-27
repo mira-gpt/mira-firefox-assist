@@ -19,6 +19,7 @@ def main():
     group.add_argument('--navigate', metavar='URL', help='Navigate within the current origin after visible approval.')
     group.add_argument('--click', metavar='SELECTOR', help='Click one visible page element after approval.')
     group.add_argument('--click-text', metavar='TEXT', help='Click a unique visible link or button with exactly this label.')
+    group.add_argument('--highlight', metavar='SELECTOR', help='Temporarily outline one visible element without clicking it.')
     group.add_argument('--refresh', action='store_true', help='Request a fresh read-only page snapshot.')
     group.add_argument('--form', metavar='FILE', help='JSON form-and-submit action, shown fully before approval.')
     group.add_argument('--chat-send', nargs=2, metavar=('SELECTOR', 'TEXT'),
@@ -34,6 +35,8 @@ def main():
         action = {'kind': 'click', 'selector': args.click}
     elif args.click_text:
         action = {'kind': 'click_text', 'text': args.click_text}
+    elif args.highlight:
+        action = {'kind': 'highlight', 'selector': args.highlight}
     elif args.refresh:
         action = {'kind': 'refresh'}
     elif args.form:

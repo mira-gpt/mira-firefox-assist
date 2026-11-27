@@ -67,7 +67,7 @@ def signature(state, path):
 
 
 def wake(path):
-    # Deliberately no automatic event delivery. Invoke $assist explicitly.
+    # Deliberately no automatic event delivery. Invoke $foxy explicitly.
     return None
 
 
