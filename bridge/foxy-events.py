@@ -6,7 +6,7 @@ import time
 import uuid
 from pathlib import Path
 
-ROOT = Path('/home/gizmore/www/pygdo/temp/mira_firefox_assist')
+ROOT = next((p for p in Path(__file__).resolve().parents if (p / 'gdo/base/Application.py').is_file()), Path('/home/gizmore/www/pygdo')) / 'temp/mira_firefox_assist'
 QUEUE = ROOT / 'foxy_notifications'
 TARGET = 'mira-codex:0.0'
 

@@ -8,7 +8,7 @@ import secrets
 from pathlib import Path
 
 
-QUEUE_DIR = Path('/home/gizmore/www/pygdo/temp/mira_firefox_assist/feedback')
+QUEUE_DIR = next((p for p in Path(__file__).resolve().parents if (p / 'gdo/base/Application.py').is_file()), Path('/home/gizmore/www/pygdo')) / 'temp/mira_firefox_assist/feedback'
 
 
 def main():
