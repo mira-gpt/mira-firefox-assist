@@ -85,12 +85,15 @@ async function injectFrame(tabId, frameId) {
 
 async function startSession(tabId, options) {
   if (options.yolo === true && options.yoloRiskAccepted !== true) throw new Error('YOLO risk acknowledgement is required.');
+  const tab = await browser.tabs.get(tabId);
+  const origin = new URL(tab.url).origin;
+  if (!['http:', 'https:'].includes(new URL(tab.url).protocol)) throw new Error('Only HTTP(S) tabs can be shared.');
   await sendHost({type: 'probe'});
   await inject(tabId);
   const previous = sessions.get(tabId);
   if (previous) await sendHost({type: 'session_stopped', sessionId: previous.id, tabId});
   const id = crypto.randomUUID();
-  const session = {id, yolo: options.yolo === true, humanControl: false, messages: []};
+  const session = {id, origin, yolo: options.yolo === true, humanControl: false, messages: []};
   appendMessage(session, 'user', options.request || 'Please inspect this tab.');
   sessions.set(tabId, session);
   await sendHost({type: 'session_started', sessionId: id, tabId, request: options.request || '', yolo: session.yolo});
@@ -162,6 +165,18 @@ browser.runtime.onMessage.addListener(async (message, sender) => {
 
   if (message.type === 'start') {
     return startSession(message.tabId, message);
+  }
+
+  if (message.type === 'reconnect') {
+    const session = sessions.get(message.tabId);
+    if (!session) throw new Error('This tab is not currently shared; start a new session.');
+    const tab = await browser.tabs.get(message.tabId);
+    if (new URL(tab.url).origin !== session.origin) throw new Error('The tab changed origin; start a new session instead.');
+    await sendHost({type: 'probe'});
+    await inject(message.tabId);
+    await browser.tabs.sendMessage(message.tabId, {type: 'snapshot', sessionId: session.id,
+      yolo: session.yolo, humanControl: session.humanControl});
+    return {active: true, humanControl: session.humanControl};
   }
 
   if (message.type === 'open_window') {

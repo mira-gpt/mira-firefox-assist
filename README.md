@@ -54,6 +54,13 @@ fields or typed field values.
 
 ## Reloading during development
 
+If an active shared tab loses its content-script connection, open the popup on
+that tab and choose **Reconnect shared tab**. It reconnects the native host and
+reinjects the content script only for the existing session and its original
+origin; it preserves the human-control and YOLO settings. Invoke `$foxy` to
+continue. A stopped session or a tab on a different origin requires a new
+explicit grant. Reconnection does not replay failed actions.
+
 The add-on is installed as a **temporary** Firefox add-on, so it disappears
 after a full Firefox restart. Reload it after changing extension files, or
 load it again after a restart:

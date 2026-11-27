@@ -6,6 +6,7 @@ const yoloRisk = document.querySelector('#yolo-risk');
 const newUrl = document.querySelector('#new-url');
 const openWindow = document.querySelector('#open-window');
 const stop = document.querySelector('#stop');
+const reconnect = document.querySelector('#reconnect');
 const control = document.querySelector('#control');
 let humanControl = false;
 const dialogue = document.querySelector('#dialogue');
@@ -34,6 +35,7 @@ async function refresh() {
   yolo.disabled = result.active;
   yoloRisk.disabled = result.active || !yolo.checked;
   stop.disabled = !result.active;
+  reconnect.disabled = !result.active;
   control.disabled = !result.active;
   humanControl = result.humanControl;
   control.textContent = humanControl ? 'Mira, continue please' : 'Human controls now';
@@ -98,6 +100,18 @@ stop.addEventListener('click', async () => {
   const tab = await activeTab();
   await browser.runtime.sendMessage({type: 'stop', tabId: tab.id});
   await refresh();
+});
+
+reconnect.addEventListener('click', async () => {
+  try {
+    const tab = await activeTab();
+    const result = await browser.runtime.sendMessage({type: 'reconnect', tabId: tab.id});
+    status.textContent = result.humanControl
+      ? 'Reconnected; human control remains active. Choose Mira, continue please when ready.'
+      : 'Reconnected; invoke $foxy to continue.';
+  } catch (error) {
+    status.textContent = `Could not reconnect: ${error.message}`;
+  }
 });
 
 control.addEventListener('click', async () => {

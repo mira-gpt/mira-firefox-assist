@@ -8,6 +8,7 @@ test('YOLO stays active without a timer and revoke rejects further actions', asy
   let receive, hostMessage, disconnect, closedTab;
   const sentToTab = [];
   const sentToHost = [];
+  let tabUrl = 'https://example.com/';
   const host = {
     onMessage: { addListener(fn) { hostMessage = fn; } },
     onDisconnect: { addListener(fn) { disconnect = fn; } },
@@ -21,6 +22,7 @@ test('YOLO stays active without a timer and revoke rejects further actions', asy
     },
     scripting: { executeScript: async () => {} },
     tabs: {
+      get: async () => ({url: tabUrl}),
       sendMessage: async (tab, message) => { sentToTab.push({tab, message}); },
       onRemoved: { addListener(fn) { closedTab = fn; } },
       onUpdated: { addListener() {} },
@@ -29,11 +31,16 @@ test('YOLO stays active without a timer and revoke rejects further actions', asy
   };
   const timers = [];
   const source = fs.readFileSync(path.join(__dirname, '../extension/background.js'), 'utf8');
-  vm.runInNewContext(source, {browser, crypto: {randomUUID: () => 'session-1'}, console,
+  vm.runInNewContext(source, {browser, URL, crypto: {randomUUID: () => 'session-1'}, console,
     setTimeout: (fn, ms) => { timers.push({fn, ms}); return timers.length; }});
   await assert.rejects(receive({type: 'start', tabId: 7, yolo: true}, {}), /acknowledgement/);
   await receive({type: 'start', tabId: 7, request: 'test', yolo: true, yoloRiskAccepted: true}, {});
   assert.equal((await receive({type: 'status', tabId: 7}, {})).yolo, true);
+  await receive({type: 'reconnect', tabId: 7}, {});
+  assert.equal(sentToTab.at(-1).message.type, 'snapshot');
+  tabUrl = 'https://other.example/';
+  await assert.rejects(receive({type: 'reconnect', tabId: 7}, {}), /changed origin/);
+  tabUrl = 'https://example.com/';
   assert.equal(timers.length, 0, 'an active session has no expiry timer');
   await receive({type: 'set_control', tabId: 7, humanControl: true}, {});
   assert.equal((await receive({type: 'status', tabId: 7}, {})).humanControl, true);
@@ -48,6 +55,7 @@ test('YOLO stays active without a timer and revoke rejects further actions', asy
   assert.equal(timers[0].ms, 3000, 'disconnected host schedules reconnect');
   await receive({type: 'stop_current_session', sessionId: 'session-1'}, {tab: {id: 7}});
   assert.equal((await receive({type: 'status', tabId: 7}, {})).active, false);
+  await assert.rejects(receive({type: 'reconnect', tabId: 7}, {}), /not currently shared/);
   const before = sentToTab.length;
   await hostMessage({type: 'action_request', sessionId: 'session-1', action: {kind: 'click'}});
   assert.equal(sentToTab.length, before, 'revoked session cannot dispatch an action');
