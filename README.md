@@ -34,9 +34,10 @@ and externally visible actions are separate opt-in capabilities.
 3. Click the extension action on an ordinary web page, describe the request,
    then click **AI Hilfe anfordern**. The host stores the tab-scoped snapshot
    under `pygdo/temp/mira_firefox_assist/`. An optional local handoff process
-   sends one `$foxy --session ID` when an Assist request starts or when the
-   user chooses Continue. It waits for an idle Codex prompt and does not send
-   page content or Ctrl-C. Snapshots do not generate wake-up events. Invoke
+   sends `$foxy --session ID --message="..."` when an Assist request starts
+   or a message is sent, and `$foxy --session ID` on Continue. It waits for
+   an idle Codex prompt, types the event character by character and sends no page content or Ctrl-C. Messages are
+   included in Codex input and its session logs. Snapshots do not generate wake-up events. Invoke
    `$foxy --session ID` manually if the handoff is unavailable.
    Framed pages produce one snapshot per accessible frame.
 

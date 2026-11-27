@@ -17,8 +17,8 @@ FEEDBACK_DIR = QUEUE_DIR / 'feedback'
 NOTIFICATIONS_DIR = QUEUE_DIR / 'foxy_notifications'
 
 
-def queue_foxy_notification(session_id, reason):
-    """Notify only for explicit user handoffs, without sending page content."""
+def queue_foxy_notification(session_id, reason, message=None):
+    """Notify for explicit user handoffs without including page content."""
     import uuid
     try:
         session_id = str(uuid.UUID(session_id))
@@ -26,9 +26,12 @@ def queue_foxy_notification(session_id, reason):
         return
     NOTIFICATIONS_DIR.mkdir(mode=0o770, parents=True, exist_ok=True)
     os.chmod(NOTIFICATIONS_DIR, 0o770)
-    path = NOTIFICATIONS_DIR / f'{secrets.token_hex(16)}.json'
+    path = NOTIFICATIONS_DIR / f'{time.time_ns():020d}-{secrets.token_hex(16)}.json'
     with path.open('x', encoding='utf-8') as stream:
-        json.dump({'sessionId': session_id, 'reason': reason}, stream)
+        event = {'sessionId': session_id, 'reason': reason}
+        if message is not None:
+            event['message'] = str(message)[:4000]
+        json.dump(event, stream, ensure_ascii=True)
     os.chmod(path, 0o660)
 
 
@@ -152,11 +155,12 @@ def main():
             save_event(message)
             write_message({'type': 'ack', 'event': event, 'sessionId': message.get('sessionId')})
             if event == 'session_started':
-                queue_foxy_notification(message.get('sessionId'), 'start')
+                queue_foxy_notification(message.get('sessionId'), 'start', message.get('request', ''))
             elif event == 'control_state' and previous.get('humanControl') is True and message.get('humanControl') is False:
                 queue_foxy_notification(message.get('sessionId'), 'continue')
         elif event == 'user_note':
             save_user_note(message)
+            queue_foxy_notification(message.get('sessionId'), 'message', message.get('text', ''))
             write_message({'type': 'ack', 'event': event, 'sessionId': message.get('sessionId')})
         else:
             write_message({'type': 'error', 'error': 'unsupported_message'})
