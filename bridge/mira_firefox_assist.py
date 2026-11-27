@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 
 MAX_MESSAGE_BYTES = 1_000_000
-QUEUE_DIR = Path('/home/gizmore/www/pygdo/temp/mira_firefox_assist')
+QUEUE_DIR = next((p for p in Path(__file__).resolve().parents if (p / 'gdo/base/Application.py').is_file()), Path('/home/gizmore/www/pygdo')) / 'temp/mira_firefox_assist'
 ACTIONS_DIR = QUEUE_DIR / 'actions'
 FEEDBACK_DIR = QUEUE_DIR / 'feedback'
 NOTIFICATIONS_DIR = QUEUE_DIR / 'foxy_notifications'
