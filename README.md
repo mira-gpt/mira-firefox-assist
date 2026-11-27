@@ -33,8 +33,19 @@ and externally visible actions are separate opt-in capabilities.
 
 3. Click the extension action on an ordinary web page, describe the request,
    then click **AI Hilfe anfordern**. The host stores the tab-scoped snapshot
-   under `pygdo/temp/mira_firefox_assist/` and notifies Mira by path only.
+   under `pygdo/temp/mira_firefox_assist/`. An optional local handoff process
+   sends one `$foxy --session ID` when an Assist request starts or when the
+   user chooses Continue. It waits for an idle Codex prompt and does not send
+   page content or Ctrl-C. Snapshots do not generate wake-up events. Invoke
+   `$foxy` or `$assist PATH` manually if the handoff is unavailable.
    Framed pages produce one snapshot per accessible frame.
+
+To open a separate window, enter an HTTP(S) URL in the extension popup and
+choose **Open and share new window**. Firefox asks for permission for that
+site; the extension opens a normal window and starts a session after the page
+loads. Cross-origin redirects must be shared manually. Optional site permission
+is managed in Firefox's add-on settings and is separate from revoking a tab
+session. Reload the temporary extension after updating its manifest or code.
 
 The snapshot contains the current DOM source (bounded to 250 KiB), visible
 text, form metadata without values, loaded script metadata, inline `on*`
@@ -69,11 +80,18 @@ local JavaScript file:
 ./bridge/queue-action.py --session SESSION --input '#search' 'example'
 ./bridge/queue-action.py --session SESSION --navigate '/private_messages/privatemessages.php'
 ./bridge/queue-action.py --session SESSION --click 'button[type=submit]'
+./bridge/queue-action.py --session SESSION --click-text 'Catalog'
+./bridge/queue-action.py --session SESSION --refresh
 ./bridge/queue-action.py --session SESSION --form ./actions/tbs-pm-quangntenemy.json
 ./bridge/queue-action.py --session SESSION --script ./reviewed-action.js
 # For a captured child frame:
 ./bridge/queue-action.py --session SESSION --frame 2 --input '#search' 'example'
 ```
+
+`--click-text` only clicks a unique visible link or button whose label matches
+exactly; ambiguous matches are reported instead of guessed. `--refresh` asks
+for a fresh read-only snapshot in the current frame. Like other actions these
+require a live shared session; action approval follows the session mode.
 
 Normally the extension displays the precise request as an overlay and the
 person at the browser chooses **Allow once**. Optionally select **YOLO**
@@ -98,8 +116,8 @@ later, separately approved action.
 ## Assist dialogue
 
 The popup shows a small, tab-scoped dialogue while a session is active. The
-person at the browser can send a short clarification to Mira; it is appended to
-the session job and wakes Mira with the path only. Mira can return a visible
+person at the browser can save a short clarification in the session job; invoke
+`$assist PATH` or `$foxy` to ask Mira to inspect it. Mira can return a visible
 status, result or pause reason without taking a browser action:
 
 ```bash

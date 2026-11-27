@@ -18,6 +18,8 @@ def main():
     group.add_argument('--input', nargs=2, metavar=('SELECTOR', 'TEXT'))
     group.add_argument('--navigate', metavar='URL', help='Navigate within the current origin after visible approval.')
     group.add_argument('--click', metavar='SELECTOR', help='Click one visible page element after approval.')
+    group.add_argument('--click-text', metavar='TEXT', help='Click a unique visible link or button with exactly this label.')
+    group.add_argument('--refresh', action='store_true', help='Request a fresh read-only page snapshot.')
     group.add_argument('--form', metavar='FILE', help='JSON form-and-submit action, shown fully before approval.')
     group.add_argument('--chat-send', nargs=2, metavar=('SELECTOR', 'TEXT'),
                        help='Set a visible contenteditable composer and submit it after approval.')
@@ -30,6 +32,10 @@ def main():
         action = {'kind': 'navigate', 'url': args.navigate}
     elif args.click:
         action = {'kind': 'click', 'selector': args.click}
+    elif args.click_text:
+        action = {'kind': 'click_text', 'text': args.click_text}
+    elif args.refresh:
+        action = {'kind': 'refresh'}
     elif args.form:
         action = json.loads(Path(args.form).read_text(encoding='utf-8'))
         if action.get('kind') != 'form_submit' or not isinstance(action.get('fields'), dict) or not isinstance(action.get('submit'), str):

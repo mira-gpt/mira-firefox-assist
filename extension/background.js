@@ -1,5 +1,6 @@
 const HOST = 'org.mira.firefox_assist';
 const sessions = new Map();
+const pendingWindows = new Map();
 let host = null;
 let hostState = 'disconnected';
 let hostError = '';
@@ -82,6 +83,38 @@ async function injectFrame(tabId, frameId) {
   });
 }
 
+async function startSession(tabId, options) {
+  if (options.yolo === true && options.yoloRiskAccepted !== true) throw new Error('YOLO risk acknowledgement is required.');
+  await sendHost({type: 'probe'});
+  await inject(tabId);
+  const previous = sessions.get(tabId);
+  if (previous) await sendHost({type: 'session_stopped', sessionId: previous.id, tabId});
+  const id = crypto.randomUUID();
+  const session = {id, yolo: options.yolo === true, humanControl: false, messages: []};
+  appendMessage(session, 'user', options.request || 'Please inspect this tab.');
+  sessions.set(tabId, session);
+  await sendHost({type: 'session_started', sessionId: id, tabId, request: options.request || '', yolo: session.yolo});
+  await browser.tabs.sendMessage(tabId, {type: 'snapshot', sessionId: id, yolo: session.yolo, humanControl: false});
+  return {active: true};
+}
+
+async function startPendingWindow(tabId) {
+  const pending = pendingWindows.get(tabId);
+  if (!pending || pending.starting) return;
+  pending.starting = true;
+  try {
+    const tab = await browser.tabs.get(tabId);
+    if (tab.status !== 'complete') { pending.starting = false; return; }
+    if (new URL(tab.url).origin !== pending.origin) throw new Error('Opened page redirected to a different origin; share it manually.');
+    await startSession(tabId, pending);
+    pendingWindows.delete(tabId);
+  } catch (error) {
+    pendingWindows.delete(tabId);
+    hostError = `Could not start new window session: ${String(error)}`;
+    notifyPopup(tabId);
+  }
+}
+
 async function handleHostMessage(message) {
   const found = message.tabId === undefined
     ? [...sessions.entries()].find(([, session]) => session.id === message.sessionId)
@@ -128,22 +161,20 @@ browser.runtime.onMessage.addListener(async (message, sender) => {
   }
 
   if (message.type === 'start') {
-    if (message.yolo === true && message.yoloRiskAccepted !== true) {
-      throw new Error('YOLO risk acknowledgement is required.');
-    }
-    await sendHost({type: 'probe'});
-    await inject(message.tabId);
-    const previous = sessions.get(message.tabId);
-    if (previous) {
-      await sendHost({type: 'session_stopped', sessionId: previous.id, tabId: message.tabId});
-    }
-    const id = crypto.randomUUID();
-    const session = {id, yolo: message.yolo === true, humanControl: false, messages: []};
-    appendMessage(session, 'user', message.request || 'Please inspect this tab.');
-    sessions.set(message.tabId, session);
-    await sendHost({type: 'session_started', sessionId: id, tabId: message.tabId, request: message.request || '', yolo: session.yolo});
-    await browser.tabs.sendMessage(message.tabId, {type: 'snapshot', sessionId: id, yolo: session.yolo, humanControl: false});
-    return {active: true};
+    return startSession(message.tabId, message);
+  }
+
+  if (message.type === 'open_window') {
+    if (message.yolo === true && message.yoloRiskAccepted !== true) throw new Error('YOLO risk acknowledgement is required.');
+    const url = new URL(message.url);
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error('Invalid URL.');
+    if (!await browser.permissions.contains({origins: [`${url.origin}/*`]})) throw new Error('Site access not granted.');
+    const window = await browser.windows.create({url: url.href, type: 'normal'});
+    const tabId = window.tabs?.[0]?.id;
+    if (tabId === undefined) throw new Error('New window has no accessible tab.');
+    pendingWindows.set(tabId, {...message, origin: url.origin, starting: false});
+    await startPendingWindow(tabId);
+    return {opened: true};
   }
 
   if (message.type === 'stop') {
@@ -204,6 +235,7 @@ browser.runtime.onMessage.addListener(async (message, sender) => {
 });
 
 browser.tabs.onRemoved.addListener((tabId) => {
+  pendingWindows.delete(tabId);
   const session = sessions.get(tabId);
   sessions.delete(tabId);
   if (session) sendHost({type: 'session_stopped', sessionId: session.id, tabId}).catch(() => {});
@@ -227,6 +259,7 @@ browser.webNavigation.onCommitted.addListener(async (details) => {
 // again after its document and child frames have settled.
 browser.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
   if (changeInfo.status !== 'complete') return;
+  if (pendingWindows.has(tabId)) { await startPendingWindow(tabId); return; }
   const session = sessions.get(tabId);
   if (!session) return;
   try {

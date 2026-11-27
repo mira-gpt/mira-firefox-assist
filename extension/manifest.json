@@ -10,6 +10,7 @@
     }
   },
   "permissions": ["activeTab", "scripting", "nativeMessaging", "storage", "webNavigation"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
   "action": {
     "default_title": "Mira Firefox Assist",
     "default_popup": "popup.html"

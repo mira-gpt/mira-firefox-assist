@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Wake Mira for newly open or stalled Firefox Assist jobs."""
+"""Inspect Firefox Assist jobs without automatically waking the assistant."""
 
 import argparse
 import hashlib
 import json
 import os
-import subprocess
 import time
 from pathlib import Path
 
@@ -68,18 +67,8 @@ def signature(state, path):
 
 
 def wake(path):
-    # Do not append an assist event to an unfinished prompt in Mira's editor.
-    # The benign word makes Ctrl-C cancel the prompt rather than the terminal.
-    subprocess.run(['tmux', 'send-keys', '-t', TMUX_TARGET, '-l', '--', 'quack'], check=True)
-    time.sleep(0.1)
-    subprocess.run(['tmux', 'send-keys', '-t', TMUX_TARGET, 'C-c'], check=True)
-    time.sleep(0.1)
-    subprocess.run(['tmux', 'send-keys', '-t', TMUX_TARGET, '-l', '--', f'$assist {path}  '], check=True)
-    for _ in range(2):
-        subprocess.run(['tmux', 'send-keys', '-t', TMUX_TARGET, 'C-m'], check=True)
-    time.sleep(0.042)
-    for _ in range(2):
-        subprocess.run(['tmux', 'send-keys', '-t', TMUX_TARGET, 'C-m'], check=True)
+    # Deliberately no automatic event delivery. Invoke $assist explicitly.
+    return None
 
 
 def scan_once():

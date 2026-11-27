@@ -53,3 +53,27 @@ test('YOLO stays active without a timer and revoke rejects further actions', asy
   assert.equal(sentToTab.length, before, 'revoked session cannot dispatch an action');
   closedTab(7);
 });
+
+test('new window starts a session only after matching permitted origin loads', async () => {
+  let receive, hostMessage;
+  const sent = [];
+  let tab = {id: 9, status: 'loading', url: 'https://example.com/'};
+  const host = {onMessage: {addListener(fn) {hostMessage = fn;}}, onDisconnect: {addListener() {}}, postMessage(m) {sent.push(m);}};
+  const browser = {
+    runtime: {connectNative() {queueMicrotask(() => hostMessage({type: 'host_ready'})); return host;},
+      onMessage: {addListener(fn) {receive = fn;}}, sendMessage: async () => {}},
+    permissions: {contains: async () => true},
+    windows: {create: async () => ({tabs: [tab]})},
+    scripting: {executeScript: async () => {}},
+    tabs: {get: async () => tab, sendMessage: async () => {},
+      onRemoved: {addListener() {}}, onUpdated: {addListener(fn) {this.listener = fn;}}},
+    webNavigation: {onCommitted: {addListener() {}}},
+  };
+  const source = fs.readFileSync(path.join(__dirname, '../extension/background.js'), 'utf8');
+  vm.runInNewContext(source, {browser, URL, crypto: {randomUUID: () => 'new-session'}, console, setTimeout});
+  await receive({type: 'open_window', url: 'https://example.com/', request: 'inspect'}, {});
+  assert.equal(sent.some(m => m.type === 'session_started'), false);
+  tab = {...tab, status: 'complete'};
+  await browser.tabs.onUpdated.listener(9, {status: 'complete'});
+  assert.equal(sent.some(m => m.type === 'session_started' && m.sessionId === 'new-session'), true);
+});

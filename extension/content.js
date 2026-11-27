@@ -38,6 +38,21 @@ function elementInfo(element) {
   };
 }
 
+function selectorFor(element) {
+  if (element.id) return `#${CSS.escape(element.id)}`;
+  const parts = [];
+  for (let current = element; current && current.nodeType === Node.ELEMENT_NODE; current = current.parentElement) {
+    let part = current.tagName.toLowerCase();
+    if (current.parentElement) {
+      const siblings = [...current.parentElement.children].filter((sibling) => sibling.tagName === current.tagName);
+      if (siblings.length > 1) part += `:nth-of-type(${siblings.indexOf(current) + 1})`;
+    }
+    parts.unshift(part);
+    if (current.id) { parts[0] = `#${CSS.escape(current.id)}`; break; }
+  }
+  return parts.join(' > ');
+}
+
 function rememberEvent(event) {
   const target = elementInfo(event.target);
   if (target.type === 'password') return;
@@ -66,7 +81,10 @@ function snapshot(includeSource = true) {
     selection: trim(getSelection(), 2000), text: trim(document.body?.innerText, 8000),
     source: includeSource ? trim(document.documentElement?.outerHTML, MAX_SOURCE_BYTES) : '',
     sourceTruncated: includeSource && (document.documentElement?.outerHTML.length || 0) > MAX_SOURCE_BYTES,
-    fields, scripts, inlineHandlers, observedEvents: eventLog
+    fields, scripts, inlineHandlers, observedEvents: eventLog,
+    controls: [...document.querySelectorAll('a, button, [role="button"], [role="link"]')]
+      .filter((element) => element.getClientRects().length && trim(element.innerText || element.getAttribute('aria-label'), 160))
+      .slice(0, 200).map((element) => ({selector: selectorFor(element), text: trim(element.innerText || element.getAttribute('aria-label'), 160)}))
   };
 }
 
@@ -117,6 +135,7 @@ async function typeText(field, text, version) {
 async function perform(action, yolo = false) {
   const actionSession = activeSessionId;
   const actionVersion = controlVersion;
+  if (action.kind === 'refresh') return {ok: true, kind: 'refresh'};
   if ((!yolo || action.kind === 'script') && !await confirmAction(action)) return {ok: false, reason: 'denied'};
   if (!actionSession || activeSessionId !== actionSession || humanControl || controlVersion !== actionVersion) return {ok: false, reason: 'human_control_or_session_stopped'};
   if (action.kind === 'input') {
@@ -132,8 +151,20 @@ async function perform(action, yolo = false) {
     location.assign(url.href);
     return {ok: true, kind: 'navigate', url: url.href};
   }
-  if (action.kind === 'click') {
-    const element = document.querySelector(action.selector);
+  if (action.kind === 'click' || action.kind === 'click_text') {
+    let element;
+    if (action.kind === 'click_text') {
+      const label = String(action.text || '').trim();
+      if (!label) return {ok: false, reason: 'empty_label'};
+      const matches = [...document.querySelectorAll('a, button, [role="button"], [role="link"]')]
+        .filter((candidate) => !fastIndicator?.contains(candidate) && candidate.getClientRects().length &&
+          !candidate.disabled && candidate.getAttribute('aria-disabled') !== 'true' &&
+          (candidate.innerText || candidate.getAttribute('aria-label') || '').trim() === label);
+      if (matches.length !== 1) return {ok: false, reason: matches.length ? 'ambiguous_label' : 'element_unavailable', matches: matches.length};
+      element = matches[0];
+    } else {
+      element = document.querySelector(action.selector);
+    }
     if (!element) return {ok: false, reason: 'element_unavailable'};
     const previousOutline = element.style.outline;
     element.style.outline = '3px solid #8d65ff';
@@ -222,7 +253,10 @@ browser.runtime.onMessage.addListener(async (message) => {
     activeSessionId = message.sessionId;
     try {
       const result = await perform(message.action, message.yolo === true);
-      browser.runtime.sendMessage({type: 'action_result', sessionId: message.sessionId, result});
+      await browser.runtime.sendMessage({type: 'action_result', sessionId: message.sessionId, result});
+      if (result.ok && result.kind === 'refresh' && activeSessionId === message.sessionId) {
+        await browser.runtime.sendMessage({type: 'snapshot', sessionId: message.sessionId, snapshot: snapshot()});
+      }
     } catch (error) {
       browser.runtime.sendMessage({type: 'action_result', sessionId: message.sessionId, result: {ok: false, reason: String(error)}});
     }

@@ -4,8 +4,8 @@
 import json
 import os
 import select
+import secrets
 import struct
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -14,6 +14,22 @@ MAX_MESSAGE_BYTES = 1_000_000
 QUEUE_DIR = Path('/home/gizmore/www/pygdo/temp/mira_firefox_assist')
 ACTIONS_DIR = QUEUE_DIR / 'actions'
 FEEDBACK_DIR = QUEUE_DIR / 'feedback'
+NOTIFICATIONS_DIR = QUEUE_DIR / 'foxy_notifications'
+
+
+def queue_foxy_notification(session_id, reason):
+    """Notify only for explicit user handoffs, without sending page content."""
+    import uuid
+    try:
+        session_id = str(uuid.UUID(session_id))
+    except (ValueError, TypeError, AttributeError):
+        return
+    NOTIFICATIONS_DIR.mkdir(mode=0o770, parents=True, exist_ok=True)
+    os.chmod(NOTIFICATIONS_DIR, 0o770)
+    path = NOTIFICATIONS_DIR / f'{secrets.token_hex(16)}.json'
+    with path.open('x', encoding='utf-8') as stream:
+        json.dump({'sessionId': session_id, 'reason': reason}, stream)
+    os.chmod(path, 0o660)
 
 
 def read_message():
@@ -38,27 +54,6 @@ def write_message(message):
     sys.stdout.buffer.flush()
 
 
-def notify_mira(path: Path):
-    """Only send a local job path to Mira's terminal, never untrusted page text."""
-    try:
-        # Cancel any half-written composer text before delivering an event.
-        # ``quack`` makes Ctrl-C harmless when the terminal is otherwise idle.
-        subprocess.run(['tmux', 'send-keys', '-t', 'mira-codex:0.0', '-l', '--', 'quack'], check=True)
-        time.sleep(0.1)
-        subprocess.run(['tmux', 'send-keys', '-t', 'mira-codex:0.0', 'C-c'], check=True)
-        time.sleep(0.1)
-        subprocess.run(['tmux', 'send-keys', '-t', 'mira-codex:0.0', '-l', '--', f'$assist {path}  '], check=True)
-        # Codex's multiline composer may consume an initial pair as editing
-        # input. Send a second pair after one short UI tick to submit reliably.
-        for _ in range(2):
-            subprocess.run(['tmux', 'send-keys', '-t', 'mira-codex:0.0', 'C-m'], check=True)
-        time.sleep(0.042)
-        for _ in range(2):
-            subprocess.run(['tmux', 'send-keys', '-t', 'mira-codex:0.0', 'C-m'], check=True)
-    except (OSError, subprocess.CalledProcessError) as error:
-        print(f'Could not notify Mira: {error}', file=sys.stderr)
-
-
 def save_event(message):
     QUEUE_DIR.mkdir(mode=0o770, parents=True, exist_ok=True)
     session_id = message.get('sessionId', 'unknown')
@@ -76,8 +71,7 @@ def save_event(message):
             pass
     path.write_text(json.dumps(message, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
     os.chmod(path, 0o660)
-    # A periodic dispatcher decides whether this is a newly open or a stalled
-    # job.  Do not wake Mira for every snapshot/action event.
+    # Stored for explicit inspection; the bridge does not wake the assistant.
 
 
 def send_pending_actions():
@@ -132,7 +126,6 @@ def save_user_note(message):
     data['last_user_note_at'] = int(time.time())
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
     os.chmod(path, 0o660)
-    notify_mira(path)
 
 
 def main():
@@ -150,8 +143,18 @@ def main():
         if event == 'probe':
             write_message({'type': 'ack', 'event': event})
         elif event in {'session_started', 'session_stopped', 'snapshot', 'action_result', 'control_state'}:
+            previous = {}
+            if event == 'control_state':
+                try:
+                    previous = json.loads((QUEUE_DIR / f'{message.get("sessionId")}.json').read_text(encoding='utf-8'))
+                except (OSError, json.JSONDecodeError):
+                    pass
             save_event(message)
             write_message({'type': 'ack', 'event': event, 'sessionId': message.get('sessionId')})
+            if event == 'session_started':
+                queue_foxy_notification(message.get('sessionId'), 'start')
+            elif event == 'control_state' and previous.get('humanControl') is True and message.get('humanControl') is False:
+                queue_foxy_notification(message.get('sessionId'), 'continue')
         elif event == 'user_note':
             save_user_note(message)
             write_message({'type': 'ack', 'event': event, 'sessionId': message.get('sessionId')})

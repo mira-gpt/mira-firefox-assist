@@ -3,6 +3,8 @@ const request = document.querySelector('#request');
 const start = document.querySelector('#start');
 const yolo = document.querySelector('#yolo');
 const yoloRisk = document.querySelector('#yolo-risk');
+const newUrl = document.querySelector('#new-url');
+const openWindow = document.querySelector('#open-window');
 const stop = document.querySelector('#stop');
 const control = document.querySelector('#control');
 let humanControl = false;
@@ -76,6 +78,20 @@ start.addEventListener('click', async () => {
 yolo.addEventListener('change', () => {
   yoloRisk.disabled = !yolo.checked;
   if (!yolo.checked) yoloRisk.checked = false;
+});
+
+openWindow.addEventListener('click', async () => {
+  try {
+    if (yolo.checked && !yoloRisk.checked) throw new Error('Please acknowledge the YOLO risks first.');
+    const url = new URL(newUrl.value.trim());
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error('Enter an HTTP(S) URL without credentials.');
+    const granted = await browser.permissions.request({origins: [`${url.origin}/*`]});
+    if (!granted) throw new Error('Site access was not granted.');
+    await browser.runtime.sendMessage({type: 'open_window', url: url.href, request: request.value.trim(),
+      yolo: yolo.checked, yoloRiskAccepted: yoloRisk.checked});
+  } catch (error) {
+    status.textContent = `Could not open and share: ${error.message}`;
+  }
 });
 
 stop.addEventListener('click', async () => {
