@@ -1,7 +1,11 @@
 const status = document.querySelector('#status');
 const request = document.querySelector('#request');
 const start = document.querySelector('#start');
+const yolo = document.querySelector('#yolo');
+const yoloRisk = document.querySelector('#yolo-risk');
 const stop = document.querySelector('#stop');
+const control = document.querySelector('#control');
+let humanControl = false;
 const dialogue = document.querySelector('#dialogue');
 const messages = document.querySelector('#messages');
 const note = document.querySelector('#note');
@@ -18,14 +22,20 @@ async function refresh() {
   if (result.hostError) {
     status.textContent = `Native host error: ${result.hostError}`;
   } else if (result.active) {
-    status.textContent = 'Mira may inspect this tab.';
+    status.textContent = result.yolo ? 'YOLO active on this tab. Revoke access to stop.' : 'Mira may inspect this tab.';
   } else if (result.hostState === 'connecting') {
     status.textContent = 'Connecting the local Mira bridge…';
   } else {
     status.textContent = 'This tab is not shared.';
   }
   start.disabled = result.active;
+  yolo.disabled = result.active;
+  yoloRisk.disabled = result.active || !yolo.checked;
   stop.disabled = !result.active;
+  control.disabled = !result.active;
+  humanControl = result.humanControl;
+  control.textContent = humanControl ? 'Mira, continue please' : 'Human controls now';
+  if (result.active && humanControl) status.textContent = 'Human in control; Mira actions are paused.';
   dialogue.hidden = !result.active;
   sendNote.disabled = !result.active;
   renderMessages(result.messages || [], result.assistantState);
@@ -49,9 +59,13 @@ function renderMessages(items, assistantState) {
 }
 
 start.addEventListener('click', async () => {
+  if (yolo.checked && !yoloRisk.checked) {
+    status.textContent = 'Please acknowledge the YOLO risks before starting.';
+    return;
+  }
   try {
     const tab = await activeTab();
-    await browser.runtime.sendMessage({type: 'start', tabId: tab.id, request: request.value.trim()});
+    await browser.runtime.sendMessage({type: 'start', tabId: tab.id, request: request.value.trim(), yolo: yolo.checked, yoloRiskAccepted: yoloRisk.checked});
   } catch (error) {
     status.textContent = `Could not start assistance: ${error.message}`;
   } finally {
@@ -59,9 +73,20 @@ start.addEventListener('click', async () => {
   }
 });
 
+yolo.addEventListener('change', () => {
+  yoloRisk.disabled = !yolo.checked;
+  if (!yolo.checked) yoloRisk.checked = false;
+});
+
 stop.addEventListener('click', async () => {
   const tab = await activeTab();
   await browser.runtime.sendMessage({type: 'stop', tabId: tab.id});
+  await refresh();
+});
+
+control.addEventListener('click', async () => {
+  const tab = await activeTab();
+  await browser.runtime.sendMessage({type: 'set_control', tabId: tab.id, humanControl: !humanControl});
   await refresh();
 });
 

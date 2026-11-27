@@ -41,6 +41,12 @@ def write_message(message):
 def notify_mira(path: Path):
     """Only send a local job path to Mira's terminal, never untrusted page text."""
     try:
+        # Cancel any half-written composer text before delivering an event.
+        # ``quack`` makes Ctrl-C harmless when the terminal is otherwise idle.
+        subprocess.run(['tmux', 'send-keys', '-t', 'mira-codex:0.0', '-l', '--', 'quack'], check=True)
+        time.sleep(0.1)
+        subprocess.run(['tmux', 'send-keys', '-t', 'mira-codex:0.0', 'C-c'], check=True)
+        time.sleep(0.1)
         subprocess.run(['tmux', 'send-keys', '-t', 'mira-codex:0.0', '-l', '--', f'$assist {path}  '], check=True)
         # Codex's multiline composer may consume an initial pair as editing
         # input. Send a second pair after one short UI tick to submit reliably.
@@ -63,7 +69,7 @@ def save_event(message):
         try:
             session_path = QUEUE_DIR / f'{session_id}.json'
             previous = json.loads(session_path.read_text(encoding='utf-8'))
-            for key in ('request', 'notes', 'last_user_note_at'):
+            for key in ('request', 'notes', 'last_user_note_at', 'yolo', 'humanControl'):
                 if key in previous and key not in message:
                     message[key] = previous[key]
         except (OSError, json.JSONDecodeError):
@@ -143,7 +149,7 @@ def main():
         event = message.get('type')
         if event == 'probe':
             write_message({'type': 'ack', 'event': event})
-        elif event in {'session_started', 'session_stopped', 'snapshot', 'action_result'}:
+        elif event in {'session_started', 'session_stopped', 'snapshot', 'action_result', 'control_state'}:
             save_event(message)
             write_message({'type': 'ack', 'event': event, 'sessionId': message.get('sessionId')})
         elif event == 'user_note':

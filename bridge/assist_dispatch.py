@@ -44,7 +44,7 @@ def classify(session, base, now):
     """Return (state, path) only for a human request that still needs attention."""
     snap_path, snapshot = latest_snapshot(session)
     request = base.get('request') or (snapshot or {}).get('request')
-    if not isinstance(request, str) or not request.strip() or base.get('type') == 'session_stopped':
+    if not isinstance(request, str) or not request.strip() or base.get('type') == 'session_stopped' or base.get('humanControl') is True:
         return None, None
     base_path = ROOT / f'{session}.json'
     if now - base_path.stat().st_mtime > ACTIVE_SECONDS:
@@ -68,6 +68,12 @@ def signature(state, path):
 
 
 def wake(path):
+    # Do not append an assist event to an unfinished prompt in Mira's editor.
+    # The benign word makes Ctrl-C cancel the prompt rather than the terminal.
+    subprocess.run(['tmux', 'send-keys', '-t', TMUX_TARGET, '-l', '--', 'quack'], check=True)
+    time.sleep(0.1)
+    subprocess.run(['tmux', 'send-keys', '-t', TMUX_TARGET, 'C-c'], check=True)
+    time.sleep(0.1)
     subprocess.run(['tmux', 'send-keys', '-t', TMUX_TARGET, '-l', '--', f'$assist {path}  '], check=True)
     for _ in range(2):
         subprocess.run(['tmux', 'send-keys', '-t', TMUX_TARGET, 'C-m'], check=True)

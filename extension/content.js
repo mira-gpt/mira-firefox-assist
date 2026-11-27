@@ -3,6 +3,27 @@ const MAX_EVENT_LOG = 100;
 const eventLog = [];
 let activeSessionId = null;
 let snapshotTimer = null;
+let fastIndicator = null;
+let humanControl = false;
+let controlVersion = 0;
+
+function showFastIndicator(enabled, paused = false) {
+  if (window !== window.top) return;
+  fastIndicator?.remove();
+  fastIndicator = null;
+  if (!enabled) return;
+  const bar = document.createElement('div');
+  bar.style.cssText = 'position:fixed;right:8px;top:8px;z-index:2147483647;background:#7024a8;color:white;padding:8px;border:2px solid white;border-radius:6px';
+  const toggle = document.createElement('button');
+  toggle.textContent = paused ? 'Mira, continue please' : 'Human controls now';
+  toggle.onclick = () => browser.runtime.sendMessage({type: 'set_control', sessionId: activeSessionId, humanControl: !humanControl});
+  const revoke = document.createElement('button');
+  revoke.textContent = 'Revoke access';
+  revoke.onclick = () => browser.runtime.sendMessage({type: 'stop_current_session', sessionId: activeSessionId});
+  bar.append(toggle, revoke);
+  document.documentElement.append(bar);
+  fastIndicator = bar;
+}
 
 function trim(value, limit) {
   return String(value || '').slice(0, limit);
@@ -78,14 +99,30 @@ function confirmAction(action) {
   });
 }
 
-async function perform(action) {
-  if (!await confirmAction(action)) return {ok: false, reason: 'denied'};
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+async function typeText(field, text, version) {
+  field.focus();
+  field.value = '';
+  for (const char of String(text || '')) {
+    if (!activeSessionId || humanControl || controlVersion !== version) throw new Error('human_control_or_session_stopped');
+    field.dispatchEvent(new KeyboardEvent('keydown', {key: char, bubbles: true}));
+    field.value += char;
+    field.dispatchEvent(new InputEvent('input', {bubbles: true, inputType: 'insertText', data: char}));
+    field.dispatchEvent(new KeyboardEvent('keyup', {key: char, bubbles: true}));
+    await sleep(40);
+  }
+  field.dispatchEvent(new Event('change', {bubbles: true}));
+}
+
+async function perform(action, yolo = false) {
+  const actionSession = activeSessionId;
+  const actionVersion = controlVersion;
+  if ((!yolo || action.kind === 'script') && !await confirmAction(action)) return {ok: false, reason: 'denied'};
+  if (!actionSession || activeSessionId !== actionSession || humanControl || controlVersion !== actionVersion) return {ok: false, reason: 'human_control_or_session_stopped'};
   if (action.kind === 'input') {
     const field = document.querySelector(action.selector);
     if (!field || field.type === 'password') return {ok: false, reason: 'field_unavailable'};
-    field.focus(); field.value = String(action.text || '');
-    field.dispatchEvent(new Event('input', {bubbles: true}));
-    field.dispatchEvent(new Event('change', {bubbles: true}));
+    await typeText(field, action.text, actionVersion);
     await new Promise((resolve) => setTimeout(resolve, 1000));
     return {ok: true, kind: 'input'};
   }
@@ -98,7 +135,13 @@ async function perform(action) {
   if (action.kind === 'click') {
     const element = document.querySelector(action.selector);
     if (!element) return {ok: false, reason: 'element_unavailable'};
+    const previousOutline = element.style.outline;
+    element.style.outline = '3px solid #8d65ff';
+    await sleep(500);
+    element.style.outline = previousOutline;
+    if (!activeSessionId || humanControl || controlVersion !== actionVersion) return {ok: false, reason: 'human_control_or_session_stopped'};
     element.click();
+    await sleep(200);
     await new Promise((resolve) => setTimeout(resolve, 1000));
     return {ok: true, kind: 'click'};
   }
@@ -106,13 +149,12 @@ async function perform(action) {
     for (const [selector, text] of Object.entries(action.fields || {})) {
       const field = document.querySelector(selector);
       if (!field || field.type === 'password') return {ok: false, reason: `field_unavailable:${selector}`};
-      field.focus(); field.value = String(text);
-      field.dispatchEvent(new Event('input', {bubbles: true}));
-      field.dispatchEvent(new Event('change', {bubbles: true}));
+      await typeText(field, text, actionVersion);
     }
     const submit = document.querySelector(action.submit);
     if (!submit) return {ok: false, reason: 'submit_unavailable'};
     await new Promise((resolve) => setTimeout(resolve, 1000));
+    if (!activeSessionId || humanControl || controlVersion !== actionVersion) return {ok: false, reason: 'human_control_or_session_stopped'};
     submit.click();
     await new Promise((resolve) => setTimeout(resolve, 1000));
     return {ok: true, kind: 'form_submit'};
@@ -124,10 +166,15 @@ async function perform(action) {
     }
     composer.focus();
     if (composer.tagName === 'TEXTAREA' || composer.tagName === 'INPUT') {
-      composer.value = String(action.text || '');
+      await typeText(composer, action.text, actionVersion);
     } else if (composer.getAttribute('contenteditable') === 'true') {
       document.execCommand('selectAll', false);
-      document.execCommand('insertText', false, String(action.text || ''));
+      document.execCommand('delete', false);
+      for (const char of String(action.text || '')) {
+        if (activeSessionId !== actionSession || humanControl || controlVersion !== actionVersion) return {ok: false, reason: 'human_control_or_session_stopped'};
+        document.execCommand('insertText', false, char);
+        await sleep(40);
+      }
     } else {
       return {ok: false, reason: 'composer_unavailable'};
     }
@@ -139,6 +186,7 @@ async function perform(action) {
     await new Promise((resolve) => setTimeout(resolve, 1000));
     const submit = document.querySelector('button[aria-label*="Send" i], button[data-testid="send-button"], form button[type="submit"]');
     if (!submit || submit.disabled) return {ok: false, reason: 'send_button_unavailable'};
+    if (!activeSessionId || humanControl || controlVersion !== actionVersion) return {ok: false, reason: 'human_control_or_session_stopped'};
     submit.click();
     await new Promise((resolve) => setTimeout(resolve, 1000));
     return {ok: true, kind: 'chat_send'};
@@ -156,12 +204,24 @@ async function perform(action) {
 browser.runtime.onMessage.addListener(async (message) => {
   if (message.type === 'snapshot') {
     activeSessionId = message.sessionId;
+    humanControl = message.humanControl === true;
+    showFastIndicator(message.yolo === true, humanControl);
     browser.runtime.sendMessage({type: 'snapshot', sessionId: message.sessionId, snapshot: snapshot()});
+  }
+  if (message.type === 'session_stopped' && message.sessionId === activeSessionId) {
+    activeSessionId = null;
+    controlVersion++;
+    showFastIndicator(false);
+  }
+  if (message.type === 'control_changed' && message.sessionId === activeSessionId) {
+    humanControl = message.humanControl === true;
+    controlVersion++;
+    showFastIndicator(message.yolo === true, humanControl);
   }
   if (message.type === 'action_request') {
     activeSessionId = message.sessionId;
     try {
-      const result = await perform(message.action);
+      const result = await perform(message.action, message.yolo === true);
       browser.runtime.sendMessage({type: 'action_result', sessionId: message.sessionId, result});
     } catch (error) {
       browser.runtime.sendMessage({type: 'action_result', sessionId: message.sessionId, result: {ok: false, reason: String(error)}});

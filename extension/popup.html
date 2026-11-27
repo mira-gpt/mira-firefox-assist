@@ -12,8 +12,11 @@
     <p id="status">This tab is not shared.</p>
     <label for="request">What should Mira do?</label>
     <textarea id="request" rows="3" placeholder="For example: Explain this page."></textarea>
+    <label><input id="yolo" type="checkbox"> YOLO: allow Mira to operate this tab without per-action prompts until revoked</label>
+    <label><input id="yolo-risk" type="checkbox"> I understand that YOLO lets Mira interact with this tab without asking before each action, including actions that may change data.</label>
     <button id="start" type="button">AI Hilfe anfordern</button>
-    <button id="stop" type="button" class="danger" disabled>Stop assistance</button>
+    <button id="stop" type="button" class="danger" disabled>Revoke access</button>
+    <button id="control" type="button" disabled>Human controls now</button>
     <section id="dialogue" hidden>
       <h2>Assist dialogue</h2>
       <div id="messages" aria-live="polite"></div>
@@ -21,7 +24,7 @@
       <textarea id="note" rows="2" placeholder="For example: Please only analyse the error."></textarea>
       <button id="send-note" type="button">Send message</button>
     </section>
-    <p class="note">Only this tab is shared. Password fields and typed values are never included. Every input or script action asks visibly before it runs.</p>
+    <p class="note">Only this tab is shared. YOLO has no time limit while this tab and extension stay open. Revoke access ends the session. Scripts always require approval. Page snapshots can contain sensitive information.</p>
   </main>
   <script type="module" src="popup.js"></script>
 </body>

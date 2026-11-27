@@ -75,8 +75,20 @@ local JavaScript file:
 ./bridge/queue-action.py --session SESSION --frame 2 --input '#search' 'example'
 ```
 
-The extension displays the precise request as an overlay in the browser. The
-person at the browser must choose **Allow once**; otherwise nothing runs. An
+Normally the extension displays the precise request as an overlay and the
+person at the browser chooses **Allow once**. Optionally select **YOLO**
+and acknowledge its risks when starting a session to run structured actions without individual prompts;
+the on-page **Mira YOLO — Revoke access** button or the popup's **Revoke access**
+button ends that tab session. Script actions still require approval. YOLO has
+no time limit while the tab and extension remain open; the bridge attempts to
+reconnect after a host disconnect. Closing the tab, restarting Firefox, or
+reloading the extension ends the session: a new explicit grant is then needed.
+Stop prevents new actions, though an already executing browser action cannot
+always be undone. Page snapshots may contain sensitive content and should be
+treated accordingly. **Human controls now** pauses assistant actions without
+revoking access; **Mira, continue please** resumes. Actions received while
+paused are rejected rather than replayed. An in-progress action may already
+have changed the page before the pause takes effect. An
 approved input/script action waits at least one second before reporting its
 result. A reviewed script can perform a navigation, but it is still shown in
 full and must be allowed once. Assisted tabs are refreshed after an accessible
